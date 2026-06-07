@@ -18,7 +18,7 @@ class RadarView extends WatchUi.View {
 
     // *** EDIT THIS *** to your proxy's gh-pages raw base URL (trailing slash):
     //   https://raw.githubusercontent.com/<USER>/<REPO>/gh-pages/
-    const PROXY_BASE = "https://raw.githubusercontent.com/USERNAME/REPO/gh-pages/";
+    const PROXY_BASE = "https://raw.githubusercontent.com/vidl21/arso-radar/gh-pages/";
 
     const REFRESH_MS   = 300000;  // 5 min — re-fetch the manifest
     const ANIM_MS      = 350;     // ms per frame while looping

@@ -11,7 +11,7 @@ using Toybox.PersistedContent;
 class RadarServiceDelegate extends System.ServiceDelegate {
 
     // *** EDIT THIS *** to your proxy's gh-pages raw grid URL:
-    const GRID_URL = "https://raw.githubusercontent.com/USERNAME/REPO/gh-pages/grid.json";
+    const GRID_URL = "https://raw.githubusercontent.com/vidl21/arso-radar/gh-pages/grid.json";
 
     function initialize() {
         ServiceDelegate.initialize();
