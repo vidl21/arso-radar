@@ -1,0 +1,21 @@
+# Sensitive — never commit your signing key to a public repo
+developer_key
+
+# Build artifacts
+*.prg
+*.prg.debug.xml
+*.iq
+bin/
+gen/
+internal-mir/
+external-mir/
+*.mir
+
+# Proxy output (generated on gh-pages by the Action)
+public/
+
+# OS / editor
+.DS_Store
+
+# Local tooling
+.claude/

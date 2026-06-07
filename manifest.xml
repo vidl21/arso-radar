@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<iq:manifest xmlns:iq="http://www.garmin.com/xml/connectiq" version="3">
+    <iq:application entry="RadarApp" id="1824477539ee459c8d09fc92cbc554c4" launcherIcon="@Drawables.LauncherIcon" minSdkVersion="3.1.0" name="@Strings.AppName" type="watch-app" version="1.0.0">
+        <iq:products>
+            <iq:product id="edge530"/>
+        </iq:products>
+        <iq:permissions>
+            <iq:uses-permission id="Communications"/>
+            <iq:uses-permission id="Positioning"/>
+        </iq:permissions>
+        <iq:languages>
+            <iq:language>eng</iq:language>
+        </iq:languages>
+    </iq:application>
+</iq:manifest>

@@ -1,0 +1,12 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "monkeyc",
+            "request": "launch",
+            "name": "Run Weather Radar (Edge 530)",
+            "device": "edge530",
+            "stopAtLaunch": false
+        }
+    ]
+}

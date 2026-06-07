@@ -1,0 +1,37 @@
+name: Update radar
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # every 5 min (GitHub may delay/skip under load)
+  workflow_dispatch:         # allow manual runs
+
+permissions:
+  contents: write
+
+concurrency:
+  group: radar
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install -r proxy/requirements.txt
+
+      - name: Process radar
+        run: python proxy/process_radar.py
+
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          publish_branch: gh-pages
+          force_orphan: true     # keep a single commit (no history bloat)

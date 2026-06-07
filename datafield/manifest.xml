@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<iq:manifest xmlns:iq="http://www.garmin.com/xml/connectiq" version="3">
+    <iq:application entry="RadarFieldApp" id="d0b2de553d4d4a119fa4aa5e5ef292ab" launcherIcon="@Drawables.LauncherIcon" minSdkVersion="3.1.0" name="@Strings.AppName" type="datafield" version="1.0.0">
+        <iq:products>
+            <iq:product id="edge530"/>
+        </iq:products>
+        <iq:permissions>
+            <iq:uses-permission id="Communications"/>
+            <iq:uses-permission id="Positioning"/>
+            <iq:uses-permission id="Background"/>
+        </iq:permissions>
+        <iq:languages>
+            <iq:language>eng</iq:language>
+        </iq:languages>
+    </iq:application>
+</iq:manifest>
