@@ -19,3 +19,7 @@ public/
 
 # Local tooling
 .claude/
+
+# Simulator-generated settings/state
+*-settings.json
+datafield/source/TestSeed.mc
