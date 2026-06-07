@@ -59,16 +59,30 @@ class RadarField extends WatchUi.DataField {
         var h = dc.getHeight();
 
         var grid = Application.Storage.getValue("grid");
-        if (grid == null || !(grid instanceof Lang.Dictionary)) {
+        if (!(grid instanceof Lang.String)) {
             dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
             dc.drawText(w / 2, h / 2, Graphics.FONT_XTINY, "waiting for radar...",
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
             return;
         }
 
-        var gw = grid["w"];
-        var gh = grid["h"];
-        var bytes = StringUtil.convertEncodedString(grid["d"], {
+        // Parse "W\nH\nHH:MM\n<base64>".
+        var n1 = grid.find("\n");
+        var s1 = (n1 != null) ? grid.substring(n1 + 1, grid.length()) : null;
+        var n2 = (s1 != null) ? s1.find("\n") : null;
+        var s2 = (n2 != null) ? s1.substring(n2 + 1, s1.length()) : null;
+        var n3 = (s2 != null) ? s2.find("\n") : null;
+        if (n1 == null || n2 == null || n3 == null) {
+            dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(w / 2, h / 2, Graphics.FONT_XTINY, "bad data",
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+            return;
+        }
+        var gw = grid.substring(0, n1).toNumber();
+        var gh = s1.substring(0, n2).toNumber();
+        var gt = s2.substring(0, n3);
+        var d  = s2.substring(n3 + 1, s2.length());
+        var bytes = StringUtil.convertEncodedString(d, {
             :fromRepresentation => StringUtil.REPRESENTATION_STRING_BASE64,
             :toRepresentation => StringUtil.REPRESENTATION_BYTE_ARRAY
         });
@@ -92,10 +106,8 @@ class RadarField extends WatchUi.DataField {
         }
 
         // Timestamp, top-left.
-        if (grid["t"] != null) {
-            dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(2, 0, Graphics.FONT_XTINY, grid["t"], Graphics.TEXT_JUSTIFY_LEFT);
-        }
+        dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(2, 0, Graphics.FONT_XTINY, gt, Graphics.TEXT_JUSTIFY_LEFT);
     }
 
     function drawMarker(dc, w, h) {

@@ -14,13 +14,13 @@ class RadarDelegate extends WatchUi.BehaviorDelegate {
 
     // Start/Enter (and the lap key map to onSelect on Edge devices).
     function onSelect() {
-        _view.fetchManifest();
+        _view.refresh();
         return true;
     }
 
     // Any unmapped key still forces a refresh, which is the only useful action.
     function onKey(evt) {
-        _view.fetchManifest();
+        _view.refresh();
         return true;
     }
 }

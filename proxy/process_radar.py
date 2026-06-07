@@ -28,7 +28,7 @@ ANIM_URL = "https://meteo.arso.gov.si/uploads/probase/www/observ/radar/si0-rm-an
 OUT_DIR = "public"
 FRAMES_DIR = os.path.join(OUT_DIR, "frames")
 
-FRAMES_OUT = 8          # max frames kept (bounds the watch's memory use)
+FRAMES_OUT = 6          # max frames kept (bounds the watch's memory use)
 GRID_W, GRID_H = 32, 24 # rain-grid resolution for the data field
 
 # Map (data) area inside the 821x660 image, as fractions (header bar + frame
@@ -124,6 +124,10 @@ def main():
     d = base64.b64encode(grid.tobytes()).decode("ascii")
     with open(os.path.join(OUT_DIR, "grid.json"), "w") as f:
         json.dump({"w": GRID_W, "h": GRID_H, "t": ts[-6:-1], "d": d}, f)
+    # Plain-text grid (GitHub's raw host serves .json as text/plain, so the watch
+    # parses this line-based format instead): W \n H \n HH:MM \n base64
+    with open(os.path.join(OUT_DIR, "grid.txt"), "w") as f:
+        f.write("%d\n%d\n%s\n%s" % (GRID_W, GRID_H, ts[-6:-1], d))
 
     print("wrote %d frames + grid %dx%d at %s" % (len(names), GRID_W, GRID_H, ts))
 

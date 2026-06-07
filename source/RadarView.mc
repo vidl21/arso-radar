@@ -6,24 +6,23 @@ using Toybox.Timer;
 using Toybox.System;
 using Toybox.Time;
 using Toybox.Lang;
-using Toybox.PersistedContent;
 
 // Full-screen ARSO weather-radar view for the Garmin Edge 530.
 //
-// Fetches a pre-split radar loop from your GitHub-Actions proxy:
-//   manifest.json -> list of frame PNGs -> each fetched as a bitmap.
-// This shows the full ~1-hour loop immediately, instead of building it on-device.
+// Fetches a pre-split radar loop from your GitHub-Actions proxy. Frames are at
+// fixed paths frames/00.png .. frames/NN.png (no JSON needed — GitHub's raw host
+// serves .json as text/plain, so JSON auto-parsing is unreliable).
 // Requires a phone with internet connected over Bluetooth.
 class RadarView extends WatchUi.View {
 
     // *** EDIT THIS *** to your proxy's gh-pages raw base URL (trailing slash):
-    //   https://raw.githubusercontent.com/<USER>/<REPO>/gh-pages/
     const PROXY_BASE = "https://raw.githubusercontent.com/vidl21/arso-radar/gh-pages/";
 
-    const REFRESH_MS   = 300000;  // 5 min — re-fetch the manifest
+    const NUM_FRAMES   = 6;       // matches the proxy's FRAMES_OUT (memory-bound)
+    const REFRESH_MS   = 300000;  // 5 min — re-fetch the frames
     const ANIM_MS      = 350;     // ms per frame while looping
     const HOLD_TICKS   = 4;       // pause on the newest frame
-    const FRAME_MAX_W  = 220;     // cap fetched frame width (bounds memory)
+    const FRAME_MAX_W  = 170;     // cap fetched frame width (bounds memory)
 
     // Geo-calibration. Frames are the full 821x660 image (LCC). The map area
     // sits inside a header bar + thin frame; nudge these if the marker is off.
@@ -35,12 +34,9 @@ class RadarView extends WatchUi.View {
     const SE_LON = 17.289933; const SE_LAT = 44.689702;
 
     var _frames;        // Array of bitmaps (oldest -> newest)
-    var _names;         // frame paths from the manifest
-    var _expected;      // expected frame count
     var _loadIndex;     // next frame index to fetch
-    var _loading;       // a request is in flight
+    var _loading;       // a fetch chain is in flight
     var _lastCode;      // last response code
-    var _ts;            // proxy timestamp string ("YYYY-MM-DDTHH:MMZ")
     var _animIndex;
     var _holdCount;
     var _hasFix; var _lat; var _lon;
@@ -49,12 +45,9 @@ class RadarView extends WatchUi.View {
     function initialize() {
         View.initialize();
         _frames = [];
-        _names = [];
-        _expected = 0;
         _loadIndex = 0;
         _loading = false;
         _lastCode = 0;
-        _ts = null;
         _animIndex = 0;
         _holdCount = 0;
         _hasFix = false;
@@ -73,7 +66,7 @@ class RadarView extends WatchUi.View {
             _animTimer.start(method(:onAnimTimer), ANIM_MS, true);
         }
         pollPosition();
-        fetchManifest();
+        refresh();
     }
 
     function onHide() {
@@ -82,7 +75,7 @@ class RadarView extends WatchUi.View {
         if (_animTimer != null)  { _animTimer.stop();  _animTimer = null; }
     }
 
-    function onFetchTimer() as Void { fetchManifest(); }
+    function onFetchTimer() as Void { refresh(); }
 
     function pollPosition() as Void {
         var info = Position.getInfo();
@@ -114,7 +107,8 @@ class RadarView extends WatchUi.View {
     }
 
     // --- Download pipeline ---------------------------------------------------
-    function fetchManifest() as Void {
+    // Start a fresh load of all frames (sequential, to bound memory).
+    function refresh() as Void {
         if (_loading) { return; }
         var settings = System.getDeviceSettings();
         if (settings has :phoneConnected && !settings.phoneConnected) {
@@ -122,39 +116,23 @@ class RadarView extends WatchUi.View {
             WatchUi.requestUpdate();
             return;
         }
-        var params = { "t" => Time.now().value() };
-        var options = {
-            :method => Communications.HTTP_REQUEST_METHOD_GET,
-            :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
-        };
-        Communications.makeWebRequest(PROXY_BASE + "manifest.json", params, options, method(:onManifest));
-    }
-
-    function onManifest(code as Lang.Number, data as Lang.Dictionary or Lang.String or PersistedContent.Iterator or Null) as Void {
-        _lastCode = code;
-        if (code == 200 && data != null && data instanceof Lang.Dictionary && data.hasKey("frames")) {
-            _names = data["frames"];
-            _expected = data["count"];
-            _ts = data["ts"];
-            _frames = [];          // drop old frames before loading new (bounds memory)
-            _animIndex = 0;
-            _loadIndex = 0;
-            fetchNextFrame();
-        }
-        WatchUi.requestUpdate();
+        _frames = [];          // drop old frames before loading (bounds memory)
+        _animIndex = 0;
+        _loadIndex = 0;
+        _loading = true;
+        fetchNextFrame();
     }
 
     function fetchNextFrame() as Void {
-        if (_loadIndex >= _names.size()) { _loading = false; return; }
-        _loading = true;
-        var url = PROXY_BASE + _names[_loadIndex];
+        if (_loadIndex >= NUM_FRAMES) { _loading = false; WatchUi.requestUpdate(); return; }
+        var name = "frames/" + _loadIndex.format("%02d") + ".png";
         var params = { "t" => Time.now().value() };
         var options = {
             :maxWidth => FRAME_MAX_W,
             :maxHeight => System.getDeviceSettings().screenHeight,
             :dithering => Communications.IMAGE_DITHERING_NONE
         };
-        Communications.makeImageRequest(url, params, options, method(:onFrame));
+        Communications.makeImageRequest(PROXY_BASE + name, params, options, method(:onFrame));
     }
 
     function onFrame(code as Lang.Number, data as Graphics.BitmapReference or WatchUi.BitmapResource or Null) as Void {
@@ -244,13 +222,13 @@ class RadarView extends WatchUi.View {
         if (_lastCode == -1000) {
             left = "No phone";
         } else if (_loading) {
-            left = "Updating " + n.toString() + "/" + _expected.toString();
+            left = "Updating " + n.toString() + "/" + NUM_FRAMES.toString();
+        } else if (n > 0) {
+            left = "Radar " + (_animIndex + 1).toString() + "/" + n.toString();
         } else if (_lastCode != 0 && _lastCode != 200) {
             left = "Err " + _lastCode.toString();
-        } else if (n > 0) {
-            left = hhmm() + "  " + (_animIndex + 1).toString() + "/" + n.toString();
         } else {
-            left = "--:--";
+            left = "...";
         }
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         dc.drawText(4, y + barH / 2, Graphics.FONT_XTINY, left,
@@ -261,13 +239,5 @@ class RadarView extends WatchUi.View {
             Graphics.COLOR_TRANSPARENT);
         dc.drawText(w - 4, y + barH / 2, Graphics.FONT_XTINY, right,
             Graphics.TEXT_JUSTIFY_RIGHT | Graphics.TEXT_JUSTIFY_VCENTER);
-    }
-
-    // Extract HH:MM from the proxy timestamp "YYYY-MM-DDTHH:MMZ".
-    function hhmm() {
-        if (_ts != null && _ts.length() >= 16) {
-            return _ts.substring(11, 16);
-        }
-        return "--:--";
     }
 }
