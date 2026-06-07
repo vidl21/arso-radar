@@ -20,8 +20,8 @@ class RadarView extends WatchUi.View {
 
     const NUM_FRAMES   = 6;       // matches the proxy's FRAMES_OUT (memory-bound)
     const REFRESH_MS   = 300000;  // 5 min — re-fetch the frames
-    const ANIM_MS      = 350;     // ms per frame while looping
-    const HOLD_TICKS   = 4;       // pause on the newest frame
+    const ANIM_MS      = 550;     // ms per frame while looping
+    const HOLD_TICKS   = 5;       // pause on the newest frame
     const FRAME_MAX_W  = 170;     // cap fetched frame width (bounds memory)
 
     // Geo-calibration. Frames are the full 821x660 image (LCC). The map area
@@ -139,7 +139,6 @@ class RadarView extends WatchUi.View {
         _lastCode = code;
         if (code == 200 && data != null) {
             _frames.add(data);
-            _animIndex = _frames.size() - 1;
         }
         _loadIndex += 1;
         WatchUi.requestUpdate();
@@ -163,11 +162,14 @@ class RadarView extends WatchUi.View {
             var frame = _frames[idx];
             var iw = frame.getWidth();
             var ih = frame.getHeight();
-            var imgX = (w - iw) / 2;
-            var imgY = (areaH - ih) / 2;
+            // Scale to fill the full screen width (preserve aspect, center vertically).
+            var dw = w;
+            var dh = ih * w / iw;
+            var imgX = 0;
+            var imgY = (areaH - dh) / 2;
             if (imgY < 0) { imgY = 0; }
-            dc.drawBitmap(imgX, imgY, frame);
-            if (_hasFix) { drawMarker(dc, imgX, imgY, iw, ih); }
+            dc.drawScaledBitmap(imgX, imgY, dw, dh, frame);
+            if (_hasFix) { drawMarker(dc, imgX, imgY, dw, dh); }
         } else {
             dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
             var msg = (_lastCode == -1000) ? "No phone"

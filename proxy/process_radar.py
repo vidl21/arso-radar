@@ -20,7 +20,7 @@ import os
 import datetime
 import urllib.request
 
-from PIL import Image
+from PIL import Image, ImageSequence
 import numpy as np
 
 ANIM_URL = "https://meteo.arso.gov.si/uploads/probase/www/observ/radar/si0-rm-anim.gif"
@@ -44,15 +44,24 @@ def fetch_gif() -> Image.Image:
 
 
 def extract_frames(gif: Image.Image):
+    # ImageSequence handles GIF frame disposal/compositing correctly.
     frames = []
-    try:
-        n = gif.n_frames
-    except Exception:
-        n = 1
-    for i in range(n):
-        gif.seek(i)
-        frames.append(gif.convert("RGB").copy())
+    for frame in ImageSequence.Iterator(gif):
+        frames.append(frame.convert("RGB").copy())
     return frames
+
+
+def dedup(frames):
+    # Drop consecutive identical frames (the animation repeats the last frame to
+    # create a pause before looping, which otherwise gives duplicate frames).
+    out = []
+    prev = None
+    for f in frames:
+        b = f.tobytes()
+        if b != prev:
+            out.append(f)
+            prev = b
+    return out
 
 
 def intensity_grid(rgb_frame: Image.Image):
@@ -104,11 +113,12 @@ def intensity_grid(rgb_frame: Image.Image):
 def main():
     os.makedirs(FRAMES_DIR, exist_ok=True)
     gif = fetch_gif()
-    frames = extract_frames(gif)
+    frames = dedup(extract_frames(gif))
     if not frames:
         raise SystemExit("no frames decoded")
+    print("decoded %d distinct frames" % len(frames))
 
-    selected = frames[-FRAMES_OUT:]          # most recent up to FRAMES_OUT
+    selected = frames[-FRAMES_OUT:]          # most recent distinct frames
     ts = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%MZ")
 
     names = []
