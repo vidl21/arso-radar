@@ -33,11 +33,9 @@ class RadarFieldApp extends Application.AppBase {
         return [ new RadarServiceDelegate() ];
     }
 
-    // Result handed back from the background process.
+    // The background service writes the grid straight to storage; this just
+    // signals the field to redraw. (data is a Boolean success flag.)
     function onBackgroundData(data) {
-        if (data != null) {
-            Application.Storage.setValue("grid", data);
-            WatchUi.requestUpdate();
-        }
+        WatchUi.requestUpdate();
     }
 }

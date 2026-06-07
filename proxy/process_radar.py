@@ -29,7 +29,7 @@ OUT_DIR = "public"
 FRAMES_DIR = os.path.join(OUT_DIR, "frames")
 
 FRAMES_OUT = 4          # max frames kept (bounds the watch's memory use)
-GRID_W, GRID_H = 32, 24 # rain-grid resolution for the data field
+GRID_W, GRID_H = 144, 108  # rain-grid resolution for the data field (W*H must be even)
 
 # Map (data) area inside the 821x660 image, as fractions (header bar + frame
 # cropped off). Keep these in sync with the Garmin app's MAP_* constants.
@@ -130,14 +130,18 @@ def main():
     with open(os.path.join(OUT_DIR, "manifest.json"), "w") as f:
         json.dump({"count": len(names), "ts": ts, "frames": names}, f)
 
-    grid = intensity_grid(selected[-1])      # newest frame
-    d = base64.b64encode(grid.tobytes()).decode("ascii")
+    grid = intensity_grid(selected[-1])      # newest frame, shape (H, W), values 0-7
+    flat = grid.reshape(-1)
+    # Pack two 4-bit cells per byte (even index -> high nibble) to halve payload.
+    packed = ((flat[0::2].astype(np.uint16) << 4) | flat[1::2]).astype(np.uint8)
+    d = base64.b64encode(packed.tobytes()).decode("ascii")
     with open(os.path.join(OUT_DIR, "grid.json"), "w") as f:
-        json.dump({"w": GRID_W, "h": GRID_H, "t": ts[-6:-1], "d": d}, f)
+        json.dump({"w": GRID_W, "h": GRID_H, "t": ts[-6:-1], "packed": 1, "d": d}, f)
     # Plain-text grid (GitHub's raw host serves .json as text/plain, so the watch
-    # parses this line-based format instead): W \n H \n HH:MM \n base64
+    # parses this line-based format): W \n H \n HH:MM \n base64(packed nibbles)
     with open(os.path.join(OUT_DIR, "grid.txt"), "w") as f:
         f.write("%d\n%d\n%s\n%s" % (GRID_W, GRID_H, ts[-6:-1], d))
+    print("grid %dx%d, payload %d b64 chars" % (GRID_W, GRID_H, len(d)))
 
     print("wrote %d frames + grid %dx%d at %s" % (len(names), GRID_W, GRID_H, ts))
 

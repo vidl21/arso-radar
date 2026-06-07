@@ -1,6 +1,7 @@
 using Toybox.System;
 using Toybox.Communications;
 using Toybox.Background;
+using Toybox.Application;
 using Toybox.Time;
 using Toybox.Lang;
 using Toybox.PersistedContent;
@@ -27,9 +28,12 @@ class RadarServiceDelegate extends System.ServiceDelegate {
 
     function onGrid(code as Lang.Number, data as Lang.Dictionary or Lang.String or PersistedContent.Iterator or Null) as Void {
         if (code == 200 && data instanceof Lang.String) {
-            Background.exit(data);     // hand the grid text back to the app
+            // Write straight to storage (up to 32 KB) instead of Background.exit
+            // (8 KB limit), so a higher-resolution grid fits.
+            Application.Storage.setValue("grid", data);
+            Background.exit(true);
         } else {
-            Background.exit(null);
+            Background.exit(false);
         }
     }
 }
