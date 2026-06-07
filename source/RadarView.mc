@@ -18,11 +18,10 @@ class RadarView extends WatchUi.View {
     // *** EDIT THIS *** to your proxy's gh-pages raw base URL (trailing slash):
     const PROXY_BASE = "https://raw.githubusercontent.com/vidl21/arso-radar/gh-pages/";
 
-    const NUM_FRAMES   = 6;       // matches the proxy's FRAMES_OUT (memory-bound)
+    const NUM_FRAMES   = 4;       // matches the proxy's FRAMES_OUT (memory-bound)
     const REFRESH_MS   = 300000;  // 5 min — re-fetch the frames
     const ANIM_MS      = 550;     // ms per frame while looping
     const HOLD_TICKS   = 5;       // pause on the newest frame
-    const FRAME_MAX_W  = 170;     // cap fetched frame width (bounds memory)
 
     // Geo-calibration. Frames are the full 821x660 image (LCC). The map area
     // sits inside a header bar + thin frame; nudge these if the marker is off.
@@ -128,7 +127,7 @@ class RadarView extends WatchUi.View {
         var name = "frames/" + _loadIndex.format("%02d") + ".png";
         var params = { "t" => Time.now().value() };
         var options = {
-            :maxWidth => FRAME_MAX_W,
+            :maxWidth => System.getDeviceSettings().screenWidth,   // fill full width
             :maxHeight => System.getDeviceSettings().screenHeight,
             :dithering => Communications.IMAGE_DITHERING_NONE
         };
@@ -160,16 +159,13 @@ class RadarView extends WatchUi.View {
             var idx = _animIndex;
             if (idx >= n) { idx = n - 1; }
             var frame = _frames[idx];
-            var iw = frame.getWidth();
+            var iw = frame.getWidth();   // already ~full screen width from the request
             var ih = frame.getHeight();
-            // Scale to fill the full screen width (preserve aspect, center vertically).
-            var dw = w;
-            var dh = ih * w / iw;
-            var imgX = 0;
-            var imgY = (areaH - dh) / 2;
+            var imgX = (w - iw) / 2;
+            var imgY = (areaH - ih) / 2;
             if (imgY < 0) { imgY = 0; }
-            dc.drawScaledBitmap(imgX, imgY, dw, dh, frame);
-            if (_hasFix) { drawMarker(dc, imgX, imgY, dw, dh); }
+            dc.drawBitmap(imgX, imgY, frame);
+            if (_hasFix) { drawMarker(dc, imgX, imgY, iw, ih); }
         } else {
             dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
             var msg = (_lastCode == -1000) ? "No phone"

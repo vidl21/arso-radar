@@ -28,7 +28,7 @@ ANIM_URL = "https://meteo.arso.gov.si/uploads/probase/www/observ/radar/si0-rm-an
 OUT_DIR = "public"
 FRAMES_DIR = os.path.join(OUT_DIR, "frames")
 
-FRAMES_OUT = 6          # max frames kept (bounds the watch's memory use)
+FRAMES_OUT = 4          # max frames kept (bounds the watch's memory use)
 GRID_W, GRID_H = 32, 24 # rain-grid resolution for the data field
 
 # Map (data) area inside the 821x660 image, as fractions (header bar + frame
