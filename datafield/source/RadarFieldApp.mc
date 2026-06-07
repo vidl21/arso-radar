@@ -38,4 +38,9 @@ class RadarFieldApp extends Application.AppBase {
     function onBackgroundData(data) {
         WatchUi.requestUpdate();
     }
+
+    // Redraw when the user changes the zoom (or any setting).
+    function onSettingsChanged() {
+        WatchUi.requestUpdate();
+    }
 }

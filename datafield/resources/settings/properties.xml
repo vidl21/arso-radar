@@ -1,0 +1,4 @@
+<properties>
+    <!-- Map range in km from the center (your location) to the screen edge. -->
+    <property id="viewHalfKm" type="number">75</property>
+</properties>

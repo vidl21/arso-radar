@@ -1,0 +1,49 @@
+{
+  "settings" : [ {
+    "key" : "viewHalfKm",
+    "valueType" : "number",
+    "defaultValue" : 75,
+    "configTitle" : "ZoomTitle",
+    "configPrompt" : null,
+    "configType" : "list",
+    "configError" : null,
+    "configHelpUrl" : null,
+    "configReadonly" : false,
+    "configRequired" : false,
+    "configOptions" : [ {
+      "display" : "$literal0$",
+      "value" : 40
+    }, {
+      "display" : "$literal1$",
+      "value" : 60
+    }, {
+      "display" : "$literal2$",
+      "value" : 75
+    }, {
+      "display" : "$literal3$",
+      "value" : 100
+    }, {
+      "display" : "$literal4$",
+      "value" : 150
+    }, {
+      "display" : "$literal5$",
+      "value" : 250
+    } ],
+    "configMin" : null,
+    "configMax" : null,
+    "configMaxLength" : null
+  } ],
+  "supportsLiveValidation" : false,
+  "languages" : {
+    "valyrian" : {
+      "$literal1$" : "60 km",
+      "$literal0$" : "40 km",
+      "$literal3$" : "100 km",
+      "ZoomTitle" : "Map range (km from you)",
+      "$literal2$" : "75 km",
+      "$literal5$" : "Whole region",
+      "$literal4$" : "150 km",
+      "AppName" : "Weather Radar Field"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+<settings>
+    <setting propertyKey="@Properties.viewHalfKm" title="@Strings.ZoomTitle">
+        <settingConfig type="list">
+            <listEntry value="40">40 km</listEntry>
+            <listEntry value="60">60 km</listEntry>
+            <listEntry value="75">75 km</listEntry>
+            <listEntry value="100">100 km</listEntry>
+            <listEntry value="150">150 km</listEntry>
+            <listEntry value="250">Whole region</listEntry>
+        </settingConfig>
+    </setting>
+</settings>
