@@ -64,41 +64,29 @@ def dedup(frames):
     return out
 
 
+# ARSO radar palette -> intensity level 1..15 (light blue -> magenta). The GIF
+# pixels are exactly these colors, so we match them directly. Must stay in sync
+# with the COLORS table in the data field.
+RAIN_RGB_TO_LEVEL = {
+    (8, 90, 254): 1,  (0, 140, 254): 2,  (0, 174, 253): 3,  (0, 200, 254): 4,
+    (4, 216, 131): 5, (66, 235, 66): 6,  (108, 249, 0): 7,  (184, 250, 0): 8,
+    (249, 250, 0): 9, (254, 198, 0): 10, (254, 132, 0): 11, (255, 62, 1): 12,
+    (211, 0, 0): 13,  (181, 3, 3): 14,   (203, 0, 204): 15,
+}
+
+
 def intensity_grid(rgb_frame: Image.Image):
-    """Crop to the data extent and reduce to a GRID_W x GRID_H array of 0..7."""
+    """Crop to the data extent and reduce to a GRID_H x GRID_W array of 0..15."""
     w, h = rgb_frame.size
     box = (int(MAP_LEFT * w), int(MAP_TOP * h), int(MAP_RIGHT * w), int(MAP_BOTTOM * h))
-    crop = rgb_frame.crop(box)
-    arr = np.asarray(crop).astype(np.float32) / 255.0  # H x W x 3
+    arr = np.asarray(rgb_frame.crop(box))  # H x W x 3, uint8
+    key = (arr[..., 0].astype(np.uint32) << 16) | (arr[..., 1].astype(np.uint32) << 8) | arr[..., 2]
 
-    r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
-    mx = np.maximum(np.maximum(r, g), b)
-    mn = np.minimum(np.minimum(r, g), b)
-    sat = np.where(mx > 0, (mx - mn) / np.maximum(mx, 1e-6), 0.0)
+    inten = np.zeros(key.shape, dtype=np.uint8)
+    for (r, g, b), lvl in RAIN_RGB_TO_LEVEL.items():
+        inten[key == ((r << 16) | (g << 8) | b)] = lvl
 
-    # Hue in degrees
-    hue = np.zeros_like(mx)
-    delta = mx - mn + 1e-6
-    mask = mx == r
-    hue[mask] = (60 * ((g - b) / delta) % 360)[mask]
-    mask = mx == g
-    hue[mask] = (60 * ((b - r) / delta) + 120)[mask]
-    mask = mx == b
-    hue[mask] = (60 * ((r - g) / delta) + 240)[mask]
-
-    # Classify each pixel to an intensity 0..7 by hue (blue=low -> red/magenta=high)
-    inten = np.zeros(hue.shape, dtype=np.uint8)
-    colored = (sat >= 0.25) & (mx >= 0.25)
-    h_ = hue
-    inten[colored & (h_ >= 200) & (h_ < 260)] = 1   # blue
-    inten[colored & (h_ >= 170) & (h_ < 200)] = 2   # cyan
-    inten[colored & (h_ >= 90)  & (h_ < 170)] = 3   # green
-    inten[colored & (h_ >= 60)  & (h_ < 90)]  = 4   # yellow-green
-    inten[colored & (h_ >= 40)  & (h_ < 60)]  = 5   # yellow
-    inten[colored & (h_ >= 20)  & (h_ < 40)]  = 6   # orange
-    inten[colored & ((h_ < 20) | (h_ >= 300))] = 7  # red / magenta
-
-    # Max-pool down to the grid so small cells still register.
+    # Max-pool down to the grid so small/intense cells still register.
     ph, pw = inten.shape
     out = np.zeros((GRID_H, GRID_W), dtype=np.uint8)
     for gy in range(GRID_H):
