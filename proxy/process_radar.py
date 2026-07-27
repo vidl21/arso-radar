@@ -18,12 +18,14 @@ import io
 import json
 import os
 import datetime
+import re
 import urllib.request
 
 from PIL import Image, ImageSequence
 import numpy as np
 
 ANIM_URL = "https://meteo.arso.gov.si/uploads/probase/www/observ/radar/si0-rm-anim.gif"
+LATEST_URL = "https://meteo.arso.gov.si/uploads/probase/www/observ/radar/si0-rm.gif"
 
 OUT_DIR = "public"
 FRAMES_DIR = os.path.join(OUT_DIR, "frames")
@@ -42,6 +44,22 @@ def fetch_gif() -> Image.Image:
     req = urllib.request.Request(ANIM_URL, headers={"User-Agent": "radar-proxy/1.0"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return Image.open(io.BytesIO(r.read()))
+
+
+def fetch_latest_frame():
+    """Return (RGB image, "HH:MM") for ARSO's newest single radar frame.
+
+    The GIF embeds its true observation time in a comment block
+    (# InputFile: si0-YYYYMMDD-HHMM-...). Use that rather than the workflow's own
+    clock: GitHub drops scheduled runs, so utcnow() can be an hour or more later
+    than the radar data it is labelling, which makes stale data look fresh.
+    """
+    req = urllib.request.Request(LATEST_URL, headers={"User-Agent": "radar-proxy/1.0"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        raw = r.read()
+    m = re.search(rb"si0-\d{8}-(\d{2})(\d{2})", raw)
+    hhmm = m.group(1).decode() + ":" + m.group(2).decode() if m else "--:--"
+    return Image.open(io.BytesIO(raw)).convert("RGB"), hhmm
 
 
 def extract_frames(gif: Image.Image):
@@ -141,11 +159,17 @@ def main():
     with open(os.path.join(OUT_DIR, "manifest.json"), "w") as f:
         json.dump({"count": len(names), "ts": ts, "frames": names}, f)
 
-    # Encode the newest frame as an RLE grid, halving the resolution until the
-    # payload is safely under MAX_GRID_B64 (so it always fits Background.exit()).
+    # The grid comes from ARSO's dedicated "latest frame" image together with its
+    # embedded observation time, so the timestamp shown on the watch always
+    # describes exactly the data being drawn.
+    latest_img, radar_time = fetch_latest_frame()
+    print("latest ARSO frame observed at %s UTC" % radar_time)
+
+    # Encode it as an RLE grid, halving the resolution until the payload is
+    # safely under MAX_GRID_B64 (so it always fits Background.exit()).
     gw, gh = GRID_W, GRID_H
     while True:
-        grid = intensity_grid(selected[-1], gw, gh)
+        grid = intensity_grid(latest_img, gw, gh)
         d = base64.b64encode(rle_encode(grid)).decode("ascii")
         if len(d) <= MAX_GRID_B64 or gw < 32:
             break
@@ -156,7 +180,7 @@ def main():
     # parses this line format. Line 4 marks the encoding so a stale cached grid
     # in an older format can never be misparsed.
     with open(os.path.join(OUT_DIR, "grid.txt"), "w") as f:
-        f.write("%d\n%d\n%s\nrle\n%s" % (gw, gh, ts[-6:-1], d))
+        f.write("%d\n%d\n%s\nrle\n%s" % (gw, gh, radar_time, d))
     print("grid %dx%d, payload %d b64 chars" % (gw, gh, len(d)))
 
     print("wrote %d frames + grid %dx%d at %s" % (len(names), gw, gh, ts))
