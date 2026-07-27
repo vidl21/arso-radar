@@ -108,9 +108,25 @@ class RadarField extends WatchUi.DataField {
         _w = dc.getWidth();
         _h = dc.getHeight();
 
+        // --- Zoomed, km-square screen transform centered on GPS ---------------
+        // Set up BEFORE the data check so the city reference map still renders
+        // while waiting for the first background fetch.
+        _cLat = _hasFix ? _lat : 46.05;          // default Ljubljana if no fix
+        _cLon = _hasFix ? _lon : 14.51;
+        var halfKm = Application.Properties.getValue("viewHalfKm");
+        if (halfKm == null || halfKm <= 0) { halfKm = DEFAULT_HALF_KM; }
+        halfKm = halfKm.toFloat();
+
+        var cosLat = Math.cos(_cLat * DEG);
+        var scale = (_w < _h ? _w : _h) / (2.0 * halfKm);  // px per km
+        _pxLon = 111.0 * cosLat * scale;          // px per degree lon
+        _pxLat = 111.0 * scale;                   // px per degree lat
+        _cx = _w / 2;
+        _cy = _h / 2;
+
         var grid = Application.Storage.getValue("grid");
         if (!(grid instanceof Lang.String)) {
-            drawStatus(dc, fg);
+            drawStatus(dc, fg, bg);
             return;
         }
 
@@ -124,14 +140,14 @@ class RadarField extends WatchUi.DataField {
         var s3 = (n3 != null) ? s2.substring(n3 + 1, s2.length()) : null;
         var n4 = (s3 != null) ? s3.find("\n") : null;
         if (n4 == null || !s3.substring(0, n4).equals("rle")) {
-            drawStatus(dc, fg);
+            drawStatus(dc, fg, bg);
             return;
         }
         var gw = grid.substring(0, n1).toNumber();
         var gh = s1.substring(0, n2).toNumber();
         var gt = s2.substring(0, n3);
         if (gw == null || gh == null || gw <= 0 || gh <= 0) {
-            drawStatus(dc, fg);
+            drawStatus(dc, fg, bg);
             return;
         }
         var bytes = StringUtil.convertEncodedString(s3.substring(n4 + 1, s3.length()), {
@@ -139,23 +155,9 @@ class RadarField extends WatchUi.DataField {
             :toRepresentation => StringUtil.REPRESENTATION_BYTE_ARRAY
         });
         if (bytes == null || bytes.size() < 2) {
-            drawStatus(dc, fg);
+            drawStatus(dc, fg, bg);
             return;
         }
-
-        // --- Set up the zoomed, km-square screen transform centered on GPS -----
-        _cLat = _hasFix ? _lat : 46.05;          // default Ljubljana if no fix
-        _cLon = _hasFix ? _lon : 14.51;
-        var halfKm = Application.Properties.getValue("viewHalfKm");
-        if (halfKm == null || halfKm <= 0) { halfKm = DEFAULT_HALF_KM; }
-        halfKm = halfKm.toFloat();
-
-        var cosLat = Math.cos(_cLat * DEG);
-        var scale = (_w < _h ? _w : _h) / (2.0 * halfKm);  // px per km
-        _pxLon = 111.0 * cosLat * scale;          // px per degree lon
-        _pxLat = 111.0 * scale;                   // px per degree lat
-        _cx = _w / 2;
-        _cy = _h / 2;
 
         // Limit the cell loop to the viewport's grid range.
         var dLat = halfKm / 111.0;
@@ -201,7 +203,7 @@ class RadarField extends WatchUi.DataField {
             idx += cnt;
         }
 
-        drawCities(dc);
+        drawCities(dc, fg, bg);
         if (_hasFix) { drawMarker(dc); }
 
         dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
@@ -210,7 +212,12 @@ class RadarField extends WatchUi.DataField {
 
     // Shown when no usable grid has arrived yet. There are no logs on the device,
     // so surface the background service's failure code rather than a dead end.
-    function drawStatus(dc, fg) {
+    function drawStatus(dc, fg, bg) {
+        // Still show the city/GPS reference map, so the field looks alive and
+        // oriented while the first background fetch is pending.
+        drawCities(dc, fg, bg);
+        if (_hasFix) { drawMarker(dc); }
+
         var err = Application.Storage.getValue("err");
         var top = "waiting for radar";
         var bottom = "(up to 5 min)";
@@ -225,17 +232,21 @@ class RadarField extends WatchUi.DataField {
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
     }
 
-    function drawCities(dc) {
+    // City markers. Colours are derived from the field background so the labels
+    // stay legible in both the light and dark data-screen themes -- they used to
+    // be hard-coded black, which is invisible on a black background.
+    function drawCities(dc, fg, bg) {
         for (var i = 0; i < CITIES.size(); i += 1) {
             var c = CITIES[i];
             var x = sx(c[1]);
             var y = sy(c[0]);
-            if (x < 0 || x > _w || y < 0 || y > _h) { continue; }
-            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-            dc.fillCircle(x, y, 2);
-            dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
+            if (x < 0 || x > _w - 12 || y < 8 || y > _h) { continue; }
+            dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
+            dc.fillCircle(x, y, 3);
+            dc.setColor(bg, Graphics.COLOR_TRANSPARENT);
             dc.fillCircle(x, y, 1);
-            dc.drawText(x + 3, y - 7, Graphics.FONT_XTINY, c[2], Graphics.TEXT_JUSTIFY_LEFT);
+            dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(x + 4, y - 8, Graphics.FONT_XTINY, c[2], Graphics.TEXT_JUSTIFY_LEFT);
         }
     }
 
