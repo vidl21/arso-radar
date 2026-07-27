@@ -29,7 +29,8 @@ OUT_DIR = "public"
 FRAMES_DIR = os.path.join(OUT_DIR, "frames")
 
 FRAMES_OUT = 4          # max frames kept (bounds the watch's memory use)
-GRID_W, GRID_H = 144, 108  # rain-grid resolution for the data field (W*H must be even)
+GRID_W, GRID_H = 144, 108  # rain-grid resolution for the data field
+MAX_GRID_B64 = 5000        # payload cap; Background.exit() allows 8 KB
 
 # Map (data) area inside the 821x660 image, as fractions (header bar + frame
 # cropped off). Keep these in sync with the Garmin app's MAP_* constants.
@@ -75,8 +76,8 @@ RAIN_RGB_TO_LEVEL = {
 }
 
 
-def intensity_grid(rgb_frame: Image.Image):
-    """Crop to the data extent and reduce to a GRID_H x GRID_W array of 0..15."""
+def intensity_grid(rgb_frame: Image.Image, grid_w: int, grid_h: int):
+    """Crop to the data extent and reduce to a grid_h x grid_w array of 0..15."""
     w, h = rgb_frame.size
     box = (int(MAP_LEFT * w), int(MAP_TOP * h), int(MAP_RIGHT * w), int(MAP_BOTTOM * h))
     arr = np.asarray(rgb_frame.crop(box))  # H x W x 3, uint8
@@ -88,14 +89,36 @@ def intensity_grid(rgb_frame: Image.Image):
 
     # Max-pool down to the grid so small/intense cells still register.
     ph, pw = inten.shape
-    out = np.zeros((GRID_H, GRID_W), dtype=np.uint8)
-    for gy in range(GRID_H):
-        y0, y1 = gy * ph // GRID_H, (gy + 1) * ph // GRID_H
-        for gx in range(GRID_W):
-            x0, x1 = gx * pw // GRID_W, (gx + 1) * pw // GRID_W
+    out = np.zeros((grid_h, grid_w), dtype=np.uint8)
+    for gy in range(grid_h):
+        y0, y1 = gy * ph // grid_h, (gy + 1) * ph // grid_h
+        for gx in range(grid_w):
+            x0, x1 = gx * pw // grid_w, (gx + 1) * pw // grid_w
             block = inten[y0:max(y1, y0 + 1), x0:max(x1, x0 + 1)]
             out[gy, gx] = int(block.max()) if block.size else 0
     return out
+
+
+def rle_encode(grid) -> bytes:
+    """Row-major run-length encode to (count 1..255, value 0..15) byte pairs.
+
+    Radar frames are very sparse, so this is far smaller than one nibble per
+    cell -- which matters because the whole payload must fit through
+    Background.exit() (8 KB) and into a 32 KB background process.
+    """
+    flat = grid.reshape(-1)
+    out = bytearray()
+    run_val = int(flat[0])
+    run_len = 0
+    for v in flat:
+        v = int(v)
+        if v == run_val and run_len < 255:
+            run_len += 1
+            continue
+        out += bytes((run_len, run_val))
+        run_val, run_len = v, 1
+    out += bytes((run_len, run_val))
+    return bytes(out)
 
 
 def main():
@@ -118,20 +141,25 @@ def main():
     with open(os.path.join(OUT_DIR, "manifest.json"), "w") as f:
         json.dump({"count": len(names), "ts": ts, "frames": names}, f)
 
-    grid = intensity_grid(selected[-1])      # newest frame, shape (H, W), values 0-7
-    flat = grid.reshape(-1)
-    # Pack two 4-bit cells per byte (even index -> high nibble) to halve payload.
-    packed = ((flat[0::2].astype(np.uint16) << 4) | flat[1::2]).astype(np.uint8)
-    d = base64.b64encode(packed.tobytes()).decode("ascii")
-    with open(os.path.join(OUT_DIR, "grid.json"), "w") as f:
-        json.dump({"w": GRID_W, "h": GRID_H, "t": ts[-6:-1], "packed": 1, "d": d}, f)
-    # Plain-text grid (GitHub's raw host serves .json as text/plain, so the watch
-    # parses this line-based format): W \n H \n HH:MM \n base64(packed nibbles)
-    with open(os.path.join(OUT_DIR, "grid.txt"), "w") as f:
-        f.write("%d\n%d\n%s\n%s" % (GRID_W, GRID_H, ts[-6:-1], d))
-    print("grid %dx%d, payload %d b64 chars" % (GRID_W, GRID_H, len(d)))
+    # Encode the newest frame as an RLE grid, halving the resolution until the
+    # payload is safely under MAX_GRID_B64 (so it always fits Background.exit()).
+    gw, gh = GRID_W, GRID_H
+    while True:
+        grid = intensity_grid(selected[-1], gw, gh)
+        d = base64.b64encode(rle_encode(grid)).decode("ascii")
+        if len(d) <= MAX_GRID_B64 or gw < 32:
+            break
+        print("grid %dx%d -> %d b64 chars, too big; halving" % (gw, gh, len(d)))
+        gw, gh = gw // 2, gh // 2
 
-    print("wrote %d frames + grid %dx%d at %s" % (len(names), GRID_W, GRID_H, ts))
+    # Plain text: GitHub's raw host serves .json as text/plain, so the watch
+    # parses this line format. Line 4 marks the encoding so a stale cached grid
+    # in an older format can never be misparsed.
+    with open(os.path.join(OUT_DIR, "grid.txt"), "w") as f:
+        f.write("%d\n%d\n%s\nrle\n%s" % (gw, gh, ts[-6:-1], d))
+    print("grid %dx%d, payload %d b64 chars" % (gw, gh, len(d)))
+
+    print("wrote %d frames + grid %dx%d at %s" % (len(names), gw, gh, ts))
 
 
 if __name__ == "__main__":

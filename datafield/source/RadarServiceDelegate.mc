@@ -1,17 +1,22 @@
 using Toybox.System;
 using Toybox.Communications;
 using Toybox.Background;
-using Toybox.Application;
 using Toybox.Time;
 using Toybox.Lang;
 using Toybox.PersistedContent;
 
 // Background worker: the ONLY context allowed to make web requests for a data
-// field. Fetches the small rain-grid JSON and returns it to the app.
+// field. Runs in a 32 KB memory pool, so it does as little as possible -- fetch
+// the (RLE-compressed, ~2 KB) grid and hand it straight back.
+//
+// The payload is returned via Background.exit() rather than written to storage:
+// storage writes from a background process need API level 3.2.0, while
+// Background.exit() has worked since 2.3.0. The RLE payload is small enough to
+// stay well under the 8 KB exit limit.
 (:background)
 class RadarServiceDelegate extends System.ServiceDelegate {
 
-    // *** EDIT THIS *** to your proxy's gh-pages raw grid URL (plain-text form):
+    // Plain-text grid published by the GitHub Actions proxy.
     const GRID_URL = "https://raw.githubusercontent.com/vidl21/arso-radar/gh-pages/grid.txt";
 
     function initialize() {
@@ -23,17 +28,16 @@ class RadarServiceDelegate extends System.ServiceDelegate {
         var options = {
             :method => Communications.HTTP_REQUEST_METHOD_GET
         };
+        // The ?t= cache-buster matters: GitHub's raw CDN was observed serving a
+        // stale grid for several minutes after the proxy updated it.
         Communications.makeWebRequest(GRID_URL, { "t" => Time.now().value() }, options, method(:onGrid));
     }
 
     function onGrid(code as Lang.Number, data as Lang.Dictionary or Lang.String or PersistedContent.Iterator or Null) as Void {
         if (code == 200 && data instanceof Lang.String) {
-            // Write straight to storage (up to 32 KB) instead of Background.exit
-            // (8 KB limit), so a higher-resolution grid fits.
-            Application.Storage.setValue("grid", data);
-            Background.exit(true);
+            Background.exit(data);     // String  -> the grid payload
         } else {
-            Background.exit(false);
+            Background.exit(code);     // Number  -> failure code, shown on screen
         }
     }
 }

@@ -110,31 +110,38 @@ class RadarField extends WatchUi.DataField {
 
         var grid = Application.Storage.getValue("grid");
         if (!(grid instanceof Lang.String)) {
-            dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(_w / 2, _h / 2, Graphics.FONT_XTINY, "waiting for radar...",
-                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+            drawStatus(dc, fg);
             return;
         }
 
-        // Parse "W\nH\nHH:MM\n<base64>".
+        // Parse "W\nH\nHH:MM\nrle\n<base64>". Line 4 is the encoding marker; a
+        // value left over from an older format is rejected rather than misread.
         var n1 = grid.find("\n");
         var s1 = (n1 != null) ? grid.substring(n1 + 1, grid.length()) : null;
         var n2 = (s1 != null) ? s1.find("\n") : null;
         var s2 = (n2 != null) ? s1.substring(n2 + 1, s1.length()) : null;
         var n3 = (s2 != null) ? s2.find("\n") : null;
-        if (n3 == null) {
-            dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(_w / 2, _h / 2, Graphics.FONT_XTINY, "bad data",
-                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        var s3 = (n3 != null) ? s2.substring(n3 + 1, s2.length()) : null;
+        var n4 = (s3 != null) ? s3.find("\n") : null;
+        if (n4 == null || !s3.substring(0, n4).equals("rle")) {
+            drawStatus(dc, fg);
             return;
         }
         var gw = grid.substring(0, n1).toNumber();
         var gh = s1.substring(0, n2).toNumber();
         var gt = s2.substring(0, n3);
-        var bytes = StringUtil.convertEncodedString(s2.substring(n3 + 1, s2.length()), {
+        if (gw == null || gh == null || gw <= 0 || gh <= 0) {
+            drawStatus(dc, fg);
+            return;
+        }
+        var bytes = StringUtil.convertEncodedString(s3.substring(n4 + 1, s3.length()), {
             :fromRepresentation => StringUtil.REPRESENTATION_STRING_BASE64,
             :toRepresentation => StringUtil.REPRESENTATION_BYTE_ARRAY
         });
+        if (bytes == null || bytes.size() < 2) {
+            drawStatus(dc, fg);
+            return;
+        }
 
         // --- Set up the zoomed, km-square screen transform centered on GPS -----
         _cLat = _hasFix ? _lat : 46.05;          // default Ljubljana if no fix
@@ -169,19 +176,29 @@ class RadarField extends WatchUi.DataField {
         if (rectSz < 2) { rectSz = 2; }
         var half = rectSz / 2;
 
-        for (var gy = gy0; gy < gy1; gy += 1) {
-            for (var gx = gx0; gx < gx1; gx += 1) {
-                var k = gy * gw + gx;
-                var b = bytes[k >> 1] & 0xFF;
-                var v = ((k & 1) == 0) ? ((b >> 4) & 0x0F) : (b & 0x0F);
-                if (v <= 0 || v >= COLORS.size()) { continue; }
-                var ll = uvToLatLon((gx + 0.5) / gw, (gy + 0.5) / gh);
-                var x = sx(ll[1]);
-                var y = sy(ll[0]);
-                if (x < -rectSz || x > _w || y < -rectSz || y > _h) { continue; }
+        // Walk the run-length stream: (count, value) byte pairs, row-major. Zero
+        // runs are skipped wholesale, so this touches only the few hundred cells
+        // that actually have rain instead of all gw*gh of them.
+        var idx = 0;
+        var nRuns = bytes.size() / 2;
+        for (var r = 0; r < nRuns; r += 1) {
+            var cnt = bytes[r * 2] & 0xFF;
+            var v = bytes[r * 2 + 1] & 0x0F;
+            if (v > 0 && v < COLORS.size()) {
                 dc.setColor(COLORS[v], Graphics.COLOR_TRANSPARENT);
-                dc.fillRectangle(x - half, y - half, rectSz, rectSz);
+                for (var c = 0; c < cnt; c += 1) {
+                    var cell = idx + c;
+                    var gy = cell / gw;
+                    var gx = cell % gw;
+                    if (gx < gx0 || gx >= gx1 || gy < gy0 || gy >= gy1) { continue; }
+                    var ll = uvToLatLon((gx + 0.5) / gw, (gy + 0.5) / gh);
+                    var x = sx(ll[1]);
+                    var y = sy(ll[0]);
+                    if (x < -rectSz || x > _w || y < -rectSz || y > _h) { continue; }
+                    dc.fillRectangle(x - half, y - half, rectSz, rectSz);
+                }
             }
+            idx += cnt;
         }
 
         drawCities(dc);
@@ -189,6 +206,23 @@ class RadarField extends WatchUi.DataField {
 
         dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
         dc.drawText(2, 0, Graphics.FONT_XTINY, gt, Graphics.TEXT_JUSTIFY_LEFT);
+    }
+
+    // Shown when no usable grid has arrived yet. There are no logs on the device,
+    // so surface the background service's failure code rather than a dead end.
+    function drawStatus(dc, fg) {
+        var err = Application.Storage.getValue("err");
+        var top = "waiting for radar";
+        var bottom = "(up to 5 min)";
+        if (err instanceof Lang.Number && err != 0) {
+            top = "no radar data";
+            bottom = "err " + err.toString();
+        }
+        dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(_w / 2, _h / 2 - 9, Graphics.FONT_XTINY, top,
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(_w / 2, _h / 2 + 9, Graphics.FONT_XTINY, bottom,
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
     }
 
     function drawCities(dc) {
