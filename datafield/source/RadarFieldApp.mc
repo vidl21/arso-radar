@@ -28,12 +28,15 @@ class RadarFieldApp extends Application.AppBase {
         // registration must only cost auto-refresh, never the whole field.
         try {
             if (Toybox has :Background) {
-                if (Background.getTemporalEventRegisteredTime() == null) {
-                    Background.registerForTemporalEvent(new Time.Duration(300));
-                }
+                // Always (re)register. Guarding on getTemporalEventRegisteredTime()
+                // risks trusting a stale registration that no longer fires, which
+                // leaves the field frozen forever. Re-registering only costs a
+                // restarted 5-minute countdown, and onStart runs once per ride.
+                Background.registerForTemporalEvent(new Time.Duration(300));
             }
         } catch (ex) {
-            // Ignore: the field still renders whatever data is already stored.
+            // Thrown if scheduled under five minutes after the previous event --
+            // harmless, the existing registration stays in effect.
         }
     }
 
