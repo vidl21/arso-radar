@@ -206,8 +206,16 @@ class RadarField extends WatchUi.DataField {
         drawCities(dc, fg, bg);
         if (_hasFix) { drawMarker(dc); }
 
+        // Timestamp (UTC, as published by ARSO) top-left. If the most recent
+        // fetch failed we are showing STALE data -- flag it, because an old grid
+        // otherwise looks exactly like a fresh one.
+        var err = Application.Storage.getValue("err");
+        var label = gt + "z";
+        if (err instanceof Lang.Number && err != 0) {
+            label = label + " !" + err.toString();
+        }
         dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(2, 0, Graphics.FONT_XTINY, gt, Graphics.TEXT_JUSTIFY_LEFT);
+        dc.drawText(2, 0, Graphics.FONT_XTINY, label, Graphics.TEXT_JUSTIFY_LEFT);
     }
 
     // Shown when no usable grid has arrived yet. There are no logs on the device,
