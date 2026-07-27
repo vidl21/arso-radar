@@ -18,16 +18,23 @@ class RadarFieldApp extends Application.AppBase {
 
     function initialize() {
         AppBase.initialize();
-        // Register once. Re-registering on every start would restart the 5-minute
-        // countdown each time, pushing the first fetch further out.
-        if (Toybox has :Background) {
-            if (Background.getTemporalEventRegisteredTime() == null) {
-                Background.registerForTemporalEvent(new Time.Duration(300));
-            }
-        }
     }
 
     function onStart(state) {
+        // Register once (re-registering restarts the 5-minute countdown), from
+        // onStart rather than initialize() and wrapped in try/catch: if this
+        // throws while the app object is being built, the device cannot start
+        // the field at all and shows the launcher icon instead. A failed
+        // registration must only cost auto-refresh, never the whole field.
+        try {
+            if (Toybox has :Background) {
+                if (Background.getTemporalEventRegisteredTime() == null) {
+                    Background.registerForTemporalEvent(new Time.Duration(300));
+                }
+            }
+        } catch (ex) {
+            // Ignore: the field still renders whatever data is already stored.
+        }
     }
 
     function onStop(state) {
